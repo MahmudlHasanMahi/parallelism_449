@@ -32,7 +32,7 @@ struct thread_buffer
         lock_guard<mutex> lock(mtx);
         if (buffer.empty())
             return false;
-        n = buffer.front(); // was: buffer.top()
+        n = buffer.front(); 
         buffer.pop();
         return true;
     }

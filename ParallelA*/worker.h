@@ -35,6 +35,10 @@ bool termination()
 }
 
 int compute_recipient(Node n) { return n.id % th_n; }
+int zobrist_hash(Node n)
+{
+    return 0;
+}
 
 void worker(int id, thread_buffer &th_buff, int goal)
 {
@@ -42,16 +46,11 @@ void worker(int id, thread_buffer &th_buff, int goal)
     unordered_set<int> open_set, closed_set;
     unordered_map<int, int> open_g;
     bool is_idle = false;
-    int i = 0;
     while (!done.load())
     {
-        i++;
-        // Drain inbox
         Node nb;
-        // cout << i << endl;
         while (th_buff.try_receive(nb))
         {
-            i++;
             if (closed_set.count(nb.id))
             {
                 if (nb.g < global_state[nb.id].g)
@@ -79,7 +78,6 @@ void worker(int id, thread_buffer &th_buff, int goal)
             if (!open_list.empty() && (open_list.top().g + open_list.top().h) < best_cost)
                 has_work = true;
         }
-
         if (!has_work)
         {
             if (!is_idle)
@@ -100,6 +98,7 @@ void worker(int id, thread_buffer &th_buff, int goal)
         }
 
         Node node = open_list.top();
+
         nodecount++;
         open_list.pop();
         if (open_g.count(node.id) && node.g > open_g[node.id])
@@ -124,7 +123,10 @@ void worker(int id, thread_buffer &th_buff, int goal)
         }
 
         for (auto &s : get_successor(node))
-            thread_buffers[compute_recipient(s)].send(s);
+        {
+            int recipient = compute_recipient(s);
+            thread_buffers[recipient].send(s);
+        }
     }
     if (is_idle)
         idle_count--;
