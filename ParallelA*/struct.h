@@ -16,6 +16,12 @@ struct Node
     int parent = -1;
 };
 
+struct MPIMessage
+{
+    Node node;
+    int target_thread; // which local thread should handle this node
+};
+
 struct thread_buffer
 {
     queue<Node> buffer; // was: priority_queue<Node, vector<Node>, CompareNode>
