@@ -15,10 +15,15 @@ struct Node
     int h = 0;
     int parent = -1;
 };
-
+struct EdgeUpdate
+{
+    int node_id;
+    int old_parent;
+    int new_parent;
+};
 struct thread_buffer
 {
-    queue<Node> buffer; // was: priority_queue<Node, vector<Node>, CompareNode>
+    queue<Node> buffer;
     mutex mtx;
 
     void send(Node n)
@@ -32,7 +37,7 @@ struct thread_buffer
         lock_guard<mutex> lock(mtx);
         if (buffer.empty())
             return false;
-        n = buffer.front(); 
+        n = buffer.front();
         buffer.pop();
         return true;
     }

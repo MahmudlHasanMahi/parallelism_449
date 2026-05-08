@@ -22,7 +22,7 @@ void print_table()
                 return;
             const int key = pair.first;
             const Node &node = pair.second;
-
+            
             std::cout << "Node ID: " << key
                       << " | Parent: " << node.parent << " --- ";
             std::this_thread::sleep_for(std::chrono::milliseconds(10));

@@ -19,7 +19,9 @@ vector<Node> get_successor(Node &parent)
     {
         int v = e.first, cost = e.second;
         if (cost > 0 && (global_state.find(v) == global_state.end() || parent.g + cost < global_state[v].g))
+        {
             neighbors.push_back({v, parent.g + cost, 0, parent.id});
+        }
     }
     return neighbors;
 }
@@ -29,8 +31,10 @@ bool termination()
     if (idle_count.load() < th_n)
         return false;
     for (auto &tb : thread_buffers)
+    {
         if (!tb.empty())
             return false;
+    }
     return true;
 }
 
@@ -69,8 +73,14 @@ void worker(int id, thread_buffer &th_buff, int goal)
                 open_set.insert(nb.id);
                 open_g[nb.id] = nb.g;
             }
+            int old_parent = -1;
+            if (global_state.count(nb.id))
+                old_parent = global_state[nb.id].parent;
+
             lock_guard<mutex> lock(global_mtx);
+
             global_state[nb.id] = nb;
+            recent_update_buffer.push_back(EdgeUpdate{nb.id, old_parent, nb.parent});
         }
 
         bool has_work = false;
@@ -116,8 +126,14 @@ void worker(int id, thread_buffer &th_buff, int goal)
             {
                 best_node = node.id;
                 best_cost = node.g;
+
+                int old_parent = -1;
+                if (global_state.count(node.id))
+                    old_parent = global_state[node.id].parent;
+
                 lock_guard<mutex> g(global_mtx);
                 global_state[node.id] = node;
+                recent_update_buffer.push_back(EdgeUpdate{nb.id, old_parent, nb.parent});
             }
             continue;
         }
