@@ -84,7 +84,7 @@ void runAStar(int S, int G)
     cout << endl;
 }
 
-const int CHUNK_SIZE = 1 * 1024 * 1024; // 4MB
+const int CHUNK_SIZE = 1 * 1024 * 1024; // 1M
 vector<uint8_t> buffer;
 int chunkIndex = 0;
 void appendInt(int32_t val)
@@ -101,14 +101,29 @@ void flushChunk(crow::websocket::connection &conn)
     buffer.clear();
     chunkIndex++;
 }
-
+void sendMetrics(crow::websocket::connection &conn)
+{
+    std::string metrics = "{\"type\":\"metrics\","
+                          "\"nodes_explored\":" +
+                          std::to_string(nodecount) + ","
+                                                      "\"best_cost\":" +
+                          std::to_string(best_cost) + ","
+                                                      "\"global_state_size\":" +
+                          std::to_string(global_state.size()) + ","
+                                                                "\"buffer_size\":" +
+                          std::to_string(recent_update_buffer.size()) + "}";
+    conn.send_text(metrics);
+}
 void sendEdgeUpdates(crow::websocket::connection &conn)
 {
     std::cout << "🚀 sendEdgeUpdates started, done=" << done.load() << std::endl;
+    int metricTick = 0;
 
     // ✅ Keep looping until done AND buffer is empty
     while (!done.load() || !recent_update_buffer.empty())
     {
+        // Send metrics every 5 ticks
+
         std::cout << "⏳ buffer size=" << recent_update_buffer.size() << std::endl;
 
         if (!recent_update_buffer.empty())
@@ -123,9 +138,14 @@ void sendEdgeUpdates(crow::websocket::connection &conn)
 
             for (const auto &edge : recent_update_buffer)
             {
+                // recent_update_buffer.erase(recent_update_buffer.begin());
+
+                // cout << recent_update_buffer.size() << endl;
                 if ((int)buffer.size() + 12 > CHUNK_SIZE)
                 {
+
                     flushChunk(conn);
+
                     appendInt(-4);
                     appendInt(total - sent);
                 }
@@ -135,14 +155,16 @@ void sendEdgeUpdates(crow::websocket::connection &conn)
                 sent++;
             }
             flushChunk(conn);
+            sendMetrics(conn);
             recent_update_buffer.clear();
-            std::cout << "📤 Sent " << total << " updates" << std::endl;
+            std::cout
+                << "Sent " << total << " updates" << std::endl;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
     // ✅ Final batch from global_state after algorithm completes
-    std::cout << "✅ Algorithm done, sending final state..." << std::endl;
+    std::cout << " Algorithm done, sending final state..." << std::endl;
 
     int cur = best_node;
     vector<EdgeUpdate> finalPath;
@@ -159,14 +181,14 @@ void sendEdgeUpdates(crow::websocket::connection &conn)
         int sent = 0;
         buffer.clear();
         chunkIndex = 0;
-        appendInt(-5); // ✅ Different marker for final path
+        appendInt(-5);
         appendInt(total);
         for (const auto &edge : finalPath)
         {
             if ((int)buffer.size() + 12 > CHUNK_SIZE)
             {
                 flushChunk(conn);
-                appendInt(-5); // ✅ Keep same marker on continuation chunks
+                appendInt(-5);
                 appendInt(total - sent);
             }
             appendInt(edge.node_id);
@@ -175,14 +197,23 @@ void sendEdgeUpdates(crow::websocket::connection &conn)
             sent++;
         }
         flushChunk(conn);
-        std::cout << "✅ Final path sent: " << total << " nodes" << std::endl;
+        std::cout << "Final path sent: " << total << " nodes" << std::endl;
+    }
+    else
+    {
+        // ✅ Notify frontend no path found
+        buffer.clear();
+        chunkIndex = 0;
+        appendInt(-6);
+        flushChunk(conn);
+        std::cout << "No path found!" << std::endl;
     }
 }
 
-void sendGraphToClient(crow::websocket::connection &conn)
+void sendGraphToClient(crow::websocket::connection &conn, int s, int d)
 {
-    buffer.clear(); // ✅ Clear buffer first
-    chunkIndex = 0; // ✅ Reset chunk index
+    buffer.clear();
+    chunkIndex = 0;
 
     int totalNode = 0;
     size_t totalEdge = 0;
@@ -197,7 +228,14 @@ void sendGraphToClient(crow::websocket::connection &conn)
                        "\"total_nodes\":" +
                        std::to_string(totalNode) + ","
                                                    "\"total_edges\":" +
-                       std::to_string(totalEdge) + "}";
+                       std::to_string(totalEdge) + ","
+                                                   "\"source_node\":" +
+                       std::to_string(s) + ","
+                                           "\"destination_node\":" +
+                       std::to_string(d) + ","
+                                           "\"threads\":" +
+                       std::to_string(th_n) +
+                       "}";
     conn.send_text(meta);
 
     for (const auto &[u, neighbors] : adj)
@@ -233,33 +271,34 @@ void sendGraphToClient(crow::websocket::connection &conn)
         appendInt(-1);
     }
     flushChunk(conn);
-    std::cout << "✅ Graph sent, totalNode=" << totalNode << std::endl;
+    std::cout << "Graph sent, totalNode=" << totalNode << std::endl;
 }
 
 int main()
 {
-    int S = 1, G = 15;
-    string file = "graph.txt";
-    loadGraph(&file);
-
+    // int S = 1, G = 15;
+    // string FILE_NAME = "graph.txt";
+    int S = 1, G = 41189;
+    string FILE_NAME = "big_graph.txt";
+    string FILE_NAME = "graph_file/graph_weighted.txt";
+    loadGraph(&FILE_NAME);
+    runAStar(S, G);
     crow::SimpleApp app;
 
     CROW_WEBSOCKET_ROUTE(app, "/ws")
-        .onopen([S, G](crow::websocket::connection &conn) // ✅ capture S and G
+        .onopen([S, G](crow::websocket::connection &conn)
                 {
             std::lock_guard<std::mutex> lock(clientsMutex);
             clients.insert(&conn);
             std::cout << "Client connected\n";
 
             std::thread([&conn, S, G]() {
-                // ✅ Start A* AFTER client connects
                 std::thread astarThread(runAStar, S, G);
                 astarThread.detach();
 
-                sendGraphToClient(conn);
-                std::cout << "✅ Graph sent\n";
+                sendGraphToClient(conn,S,G);
+                std::cout << "Graph sent\n";
 
-                // ✅ Small wait for A* to start producing updates
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
                 sendEdgeUpdates(conn);
