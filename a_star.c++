@@ -116,13 +116,13 @@ void sendMetrics(crow::websocket::connection &conn)
 }
 void sendEdgeUpdates(crow::websocket::connection &conn)
 {
-    std::cout << "🚀 sendEdgeUpdates started, done=" << done.load() << std::endl;
+    std::cout << "sendEdgeUpdates started, done=" << done.load() << std::endl;
     int metricTick = 0;
 
-    // ✅ Keep looping until done AND buffer is empty
+
     while (!done.load() || !recent_update_buffer.empty())
     {
-        // Send metrics every 5 ticks
+
 
         std::cout << "⏳ buffer size=" << recent_update_buffer.size() << std::endl;
 
@@ -138,9 +138,7 @@ void sendEdgeUpdates(crow::websocket::connection &conn)
 
             for (const auto &edge : recent_update_buffer)
             {
-                // recent_update_buffer.erase(recent_update_buffer.begin());
-
-                // cout << recent_update_buffer.size() << endl;
+    
                 if ((int)buffer.size() + 12 > CHUNK_SIZE)
                 {
 
@@ -163,7 +161,7 @@ void sendEdgeUpdates(crow::websocket::connection &conn)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    // ✅ Final batch from global_state after algorithm completes
+
     std::cout << " Algorithm done, sending final state..." << std::endl;
 
     int cur = best_node;
@@ -201,7 +199,7 @@ void sendEdgeUpdates(crow::websocket::connection &conn)
     }
     else
     {
-        // ✅ Notify frontend no path found
+
         buffer.clear();
         chunkIndex = 0;
         appendInt(-6);
